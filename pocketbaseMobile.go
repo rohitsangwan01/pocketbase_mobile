@@ -4,32 +4,40 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"syscall"
 
-	"github.com/labstack/echo/v5"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
 
 // Java Callbacks, make sure to register them before starting pocketbase
 // to expose any method to java, add that with FirstLetterCapital
 var nativeBridge NativeBridge
-var version string = "0.0.1"
+var version string = "0.0.2"
+var app *pocketbase.PocketBase
 
 func RegisterNativeBridgeCallback(c NativeBridge) { nativeBridge = c }
 
-func StartPocketbase(path string, hostname string, port string, getApiLogs bool) {
+func StartPocketbase(path string, hostname string, port string, getApiLogs bool, staticFilesPath *string) {
 	os.Args = append(os.Args, "serve", "--http", hostname+":"+port)
 	appConfig := pocketbase.Config{
 		DefaultDataDir: path,
 	}
-	app := pocketbase.NewWithConfig(&appConfig)
-	setupPocketbaseCallbacks(app, getApiLogs)
+
+	if app != nil {
+		sendCommand("log", "Pocketbase is already running")
+		StopPocketbase()
+	}
+
+	app := pocketbase.NewWithConfig(appConfig)
+	setupPocketbaseCallbacks(app, getApiLogs, staticFilesPath)
 
 	serverUrl := "http://" + hostname + ":" + port
+
 	sendCommand("onServerStarting", fmt.Sprintln("Server starting at:", serverUrl+"\n",
 		"➜ REST API: ", serverUrl+"/api/\n",
-		"➜ Admin UI: ", serverUrl+"/_/"))
+		"➜ Dashboard: ", serverUrl+"/_/"))
+
 	if err := app.Start(); err != nil {
 		sendCommand("error", fmt.Sprintln("Error: ", "Failed to start pocketbase server: ", err))
 	}
@@ -37,7 +45,13 @@ func StartPocketbase(path string, hostname string, port string, getApiLogs bool)
 
 func StopPocketbase() {
 	sendCommand("log", "Stopping pocketbase...")
-	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	if app == nil {
+		sendCommand("log", "Pocketbase is not running")
+		return
+	}
+	app.OnTerminate().Trigger(&core.TerminateEvent{App: app})
+	app = nil
+	sendCommand("log", "Pocketbase stopped")
 }
 
 func GetVersion() string {
@@ -55,65 +69,59 @@ func sendCommand(command string, data string) string {
 }
 
 // Hooks :https://pocketbase.io/docs/event-hooks/
-func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool) {
-	// Setup callbacks
-	app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-		sendCommand("OnBeforeServe", "")
-		if getApiLogs {
-			e.Router.Use(ApiLogsMiddleWare(app))
-		}
-		// setup a native Get request handler
-		e.Router.AddRoute(echo.Route{
-			Method: http.MethodGet,
-			Path:   "/api/nativeGet",
-			Handler: func(context echo.Context) error {
-				var data = sendCommand("nativeGetRequest", context.QueryParams().Encode())
-				return context.JSON(http.StatusOK, map[string]string{
-					"success": data,
-				})
-			},
-		})
-		// setup a native Post request handler
-		e.Router.AddRoute(echo.Route{
-			Method: http.MethodGet,
-			Path:   "/api/nativePost",
-			Handler: func(context echo.Context) error {
-				form, error := context.FormValues()
-				if error != nil {
-					return context.JSON(http.StatusBadRequest, map[string]string{
-						"error": error.Error(),
-					})
-				}
-				var data = sendCommand("nativePostRequest", form.Encode())
-				return context.JSON(http.StatusOK, map[string]string{
-					"success": data,
-				})
-			},
-		})
-		return nil
-	})
-	app.OnBeforeBootstrap().Add(func(e *core.BootstrapEvent) error {
-		sendCommand("OnBeforeBootstrap", "")
-		return nil
-	})
-	app.OnAfterBootstrap().Add(func(e *core.BootstrapEvent) error {
-		sendCommand("OnAfterBootstrap", "")
-		return nil
-	})
-	app.OnTerminate().Add(func(e *core.TerminateEvent) error {
-		sendCommand("OnTerminate", "")
-		return nil
-	})
-}
+func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, staticFilesPath *string) {
 
-// Middleware, this will log all api calls
-func ApiLogsMiddleWare(app core.App) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			request := c.Request()
-			fullPath := request.URL.Host + request.URL.Path + "?" + request.URL.RawQuery
-			sendCommand("apiLogs", fullPath)
-			return next(c)
+	// Setup callbacks
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Set logs middleware if required
+		if getApiLogs {
+			se.Router.BindFunc(func(e *core.RequestEvent) error {
+				fullPath := e.Request.URL.Host + e.Request.URL.Path + "?" + e.Request.URL.RawQuery
+				sendCommand("apiLogs", fullPath)
+				return e.Next()
+			})
 		}
-	}
+
+		if staticFilesPath != nil {
+			se.Router.GET("/{path...}", apis.Static(os.DirFS(*staticFilesPath), false))
+		}
+
+		// registers new "GET /hello" route
+		se.Router.GET("/api/nativeGet", func(re *core.RequestEvent) error {
+			var data = sendCommand("nativeGetRequest", re.Request.URL.Query().Encode())
+			return re.JSON(http.StatusOK, map[string]string{
+				"success": data,
+			})
+		})
+
+		se.Router.POST("/api/nativePost", func(re *core.RequestEvent) error {
+			var err = re.Request.ParseForm()
+			if err == nil {
+				var data = sendCommand("nativePostRequest", re.Request.Form.Encode())
+				return re.JSON(http.StatusOK, map[string]string{
+					"success": data,
+				})
+			} else {
+				return re.JSON(http.StatusOK, map[string]string{
+					"error": err.Error(),
+				})
+			}
+		})
+
+		return se.Next()
+	})
+
+	app.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
+		if err := e.Next(); err != nil {
+			return err
+		}
+		sendCommand("OnBootstrap", "")
+		return nil
+	})
+
+	app.OnTerminate().BindFunc(func(e *core.TerminateEvent) error {
+		sendCommand("OnTerminate", "")
+		return e.Next()
+	})
+
 }
