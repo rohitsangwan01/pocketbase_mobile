@@ -18,7 +18,7 @@ var app *pocketbase.PocketBase
 
 func RegisterNativeBridgeCallback(c NativeBridge) { nativeBridge = c }
 
-func StartPocketbase(path string, hostname string, port string, getApiLogs bool, staticFilesPath *string) {
+func StartPocketbase(path string, hostname string, port string, staticFilesPath string, getApiLogs bool) {
 	os.Args = append(os.Args, "serve", "--http", hostname+":"+port)
 	appConfig := pocketbase.Config{
 		DefaultDataDir: path,
@@ -69,7 +69,7 @@ func sendCommand(command string, data string) string {
 }
 
 // Hooks :https://pocketbase.io/docs/event-hooks/
-func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, staticFilesPath *string) {
+func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, staticFilesPath string) {
 
 	// Setup callbacks
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
@@ -82,8 +82,8 @@ func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, stati
 			})
 		}
 
-		if staticFilesPath != nil {
-			se.Router.GET("/{path...}", apis.Static(os.DirFS(*staticFilesPath), false))
+		if staticFilesPath != "" {
+			se.Router.GET("/{path...}", apis.Static(os.DirFS(staticFilesPath), false))
 		}
 
 		// registers new "GET /hello" route
