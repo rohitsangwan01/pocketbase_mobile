@@ -1,4 +1,5 @@
 build/
 PocketbaseMobile.xcframework/
+PocketbaseMobile.xcframework.zip
 *.jar
 *.aar

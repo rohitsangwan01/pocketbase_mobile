@@ -1,40 +1,106 @@
 # Pocketbase Mobile
 
-Pocketbase mobile is used to generate android and ios packages for using pocketbase in mobiles
+[![](https://jitpack.io/v/rohitsangwan01/pocketbase_mobile.svg)](https://jitpack.io/#rohitsangwan01/pocketbase_mobile)
 
+Pocketbase mobile is used to generate android and ios packages for using pocketbase in mobiles
 
 ## To build
 
-Make sure [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile) is installed 
+Make sure [gomobile](https://pkg.go.dev/golang.org/x/mobile/cmd/gomobile) is installed
 
-run :  `gomobile bind -androidapi 19` for Android, this will generate `pocketbaseMobile.aar`, import this in android and use
+run : `gomobile bind -androidapi 19` for Android, this will generate `pocketbaseMobile.aar`, import this in android and use
 
 run : `gomobile bind --target ios` for IOS or try : `gomobile bind -ldflags='-extldflags=-libresolv.tbd' -target=ios`
 
-# Usage
+# To use in Flutter
 
-[pocketbase_server_flutter](https://github.com/rohitsangwan01/pocketbase_server_flutter) to use in Flutter
+Checkout [pocketbase_server_flutter](https://github.com/rohitsangwan01/pocketbase_server_flutter)
 
-[pocketbase_android](https://github.com/rohitsangwan01/pocketbase_android) to use in native Android
- 
-[pocketbase_ios](https://github.com/rohitsangwan01/pocketbase_ios) to use in native IOS
+## To use in Android
 
-# Examples
+### Add it in your root build.gradle at the end of repositories:
 
+```gradlew
+allprojects {
+  repositories {
+     ...
+     maven { url 'https://jitpack.io' }
+  }
+}
+```
+
+### Add the dependency
+
+```gradlew
+dependencies {
+    implementation 'com.github.rohitsangwan01:pocketbase_android:Tag'
+}
+```
+
+### Usage
+
+Use CoroutineScope to call pocketbase methods ( import kotlin coroutines libraries)
+
+```kotlin
+private val uiScope = CoroutineScope(Dispatchers.Main + Job())
+```
+
+To start pocketbase
+
+```kotlin
+// use dataPath where app have write access, for example temporary cache path `context.cacheDir.absolutePath` or filePath
+uiScope.launch {
+    withContext(Dispatchers.IO) {
+        PocketbaseMobile.startPocketbase(dataPath, hostname, port, enableApiLogs)
+    }
+}
+```
+
+To stop pocketbase
+
+```kotlin
+uiScope.launch {
+    withContext(Dispatchers.IO) {
+        PocketbaseMobile.stopPocketbase()
+    }
+}
+```
+
+To listen pocketbase events, and also handle custom api requests
+
+`pocketbaseMobile` have two custom routes as well ,`/api/nativeGet` and `/api/nativePost`, we can
+get these routes in this callback and return response from kotlin
+
+```kotlin
+PocketbaseMobile.registerNativeBridgeCallback { command, data ->
+    this.runOnUiThread {
+        // Update ui from here
+    }
+    // return response back to pocketbase
+    "response from native"
+}
+```
+
+## TO use in IOS
+
+Download `PocketbaseMobile.xcframework.zip` and extract, then add this to ios project,
+
+If getting error related to `Undefined symbol`, Select `Build Phases` and in `Link Binary With Libraries` section, click on `+` button and search for `libresolv.tbd` and choose from result and click on Add
+
+checkout [this](https://github.com/golang/go/issues/58416) for more info
+
+![](assets/xcode_ss.png)
+
+# Screenshots
 
 checkout [Pocketbase Server Flutter](https://github.com/rohitsangwan01/pocketbase_server_flutter) for android and ios implementation in flutter
 
-<img src="https://github.com/rohitsangwan01/pocketbase_server_flutter/assets/59526499/7d20a2a4-0df7-4f2a-90bf-2577289e0f7e" height="300">
-<img src="https://github.com/rohitsangwan01/pocketbase_server_flutter/assets/59526499/370c007d-51c3-45a9-928c-1287c8def0d3" height="300">
-<img src="https://github.com/rohitsangwan01/pocketbase_server_flutter/assets/59526499/657a6e4c-8431-4f49-b29d-a0f599524f6c" height="300">
-<img src="https://github.com/rohitsangwan01/pocketbase_server_flutter/assets/59526499/4ecd5f1c-ae2b-4406-a10d-0d9ae3e9900e" height="300">
-<img src="https://github.com/rohitsangwan01/pocketbase_mobile/assets/59526499/5ec533af-1b6f-4c79-afd8-e3e65e2d55a1" height="300">
-<img src="https://github.com/rohitsangwan01/pocketbase_server_flutter/assets/59526499/f58f7f5e-d3d0-4328-a8be-f5cf12e15cdb" height="300">
+<img src="assets/ss_flutter.png" height="300">
 
 checkout [Pocketbase Server Android](https://github.com/rohitsangwan01/pocketbase_server_android_example) for native android implementation
 
-<img src="https://github.com/rohitsangwan01/pocketbase_mobile/assets/59526499/ff2c277a-bc9e-456c-b089-42fd264f61e3" height="300">
-<img src="https://github.com/rohitsangwan01/pocketbase_mobile/assets/59526499/93b668c8-600f-4232-b2bb-3562ccbde32e" height="300">
+<img src="assets/ss_android_1.png" height="300">
+<img src="assets/ss_android.jpg" height="300">
 
 # Usecase
 
@@ -46,5 +112,3 @@ checkout [Pocketbase Server Android](https://github.com/rohitsangwan01/pocketbas
 # Extras
 
 Checkout a Flutter chatApp built using pocketbase: [flutter_pocketbase_chat](https://github.com/rohitsangwan01/flutter_pocketbase_chat)
-
-
