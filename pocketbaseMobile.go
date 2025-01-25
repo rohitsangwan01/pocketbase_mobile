@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/dop251/goja"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/plugins/jsvm"
 )
 
 // Java Callbacks, make sure to register them before starting pocketbase
@@ -18,7 +20,7 @@ var app *pocketbase.PocketBase
 
 func RegisterNativeBridgeCallback(c NativeBridge) { nativeBridge = c }
 
-func StartPocketbase(path string, hostname string, port string, staticFilesPath string, getApiLogs bool) {
+func StartPocketbase(path string, hostname string, port string, staticFilesPath string, getApiLogs bool, email string, password string, hooks_path string) {
 	os.Args = append(os.Args, "serve", "--http", hostname+":"+port)
 	appConfig := pocketbase.Config{
 		DefaultDataDir: path,
@@ -30,7 +32,19 @@ func StartPocketbase(path string, hostname string, port string, staticFilesPath 
 	}
 
 	app := pocketbase.NewWithConfig(appConfig)
-	setupPocketbaseCallbacks(app, getApiLogs, staticFilesPath)
+	setupPocketbaseCallbacks(app, getApiLogs, staticFilesPath, email, password)
+
+	// Setup hooks
+	if hooks_path != "" {
+		jsvm.MustRegister(app, jsvm.Config{
+			HooksDir: hooks_path,
+			OnInit: func(vm *goja.Runtime) {
+				vm.Set("nativeEvent", func(event string, data string) string {
+					return sendCommand(event, data)
+				})
+			},
+		})
+	}
 
 	serverUrl := "http://" + hostname + ":" + port
 
@@ -69,10 +83,14 @@ func sendCommand(command string, data string) string {
 }
 
 // Hooks :https://pocketbase.io/docs/event-hooks/
-func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, staticFilesPath string) {
-
+func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, staticFilesPath string, email string, password string) {
 	// Setup callbacks
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// Create superuser if not exists
+		if err := createSuperUserIfNeeded(se.App, email, password); err != nil {
+			sendCommand("SuperUserFailed", "Failed to create superuser")
+		}
+
 		// Set logs middleware if required
 		if getApiLogs {
 			se.Router.BindFunc(func(e *core.RequestEvent) error {
@@ -113,6 +131,7 @@ func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, stati
 
 	app.OnBootstrap().BindFunc(func(e *core.BootstrapEvent) error {
 		if err := e.Next(); err != nil {
+			sendCommand("OnBootstrap", err.Error())
 			return err
 		}
 		sendCommand("OnBootstrap", "")
@@ -120,8 +139,26 @@ func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, stati
 	})
 
 	app.OnTerminate().BindFunc(func(e *core.TerminateEvent) error {
-		sendCommand("OnTerminate", "")
+		sendCommand("OnTerminate", "isRestart: "+fmt.Sprint(e.IsRestart))
 		return e.Next()
 	})
 
+}
+
+func createSuperUserIfNeeded(app core.App, email, password string) error {
+	superusersCol, err := app.FindCachedCollectionByNameOrId(core.CollectionNameSuperusers)
+	if err != nil {
+		return err
+	}
+	superuserRecord, _ := app.FindAuthRecordByEmail(superusersCol, email)
+	if superuserRecord != nil {
+		return nil
+	}
+	superuser := core.NewRecord(superusersCol)
+	superuser.SetEmail(email)
+	superuser.SetPassword(password)
+	if err := app.Save(superuser); err != nil {
+		return err
+	}
+	return nil
 }
