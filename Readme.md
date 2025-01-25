@@ -81,7 +81,7 @@ PocketbaseMobile.registerNativeBridgeCallback { command, data ->
 }
 ```
 
-## TO use in IOS
+## To use in IOS
 
 Download `PocketbaseMobile.xcframework.zip` and extract, then add this to ios project,
 
@@ -93,11 +93,11 @@ checkout [this](https://github.com/golang/go/issues/58416) for more info
 
 # Screenshots
 
-checkout [Pocketbase Server Flutter](https://github.com/rohitsangwan01/pocketbase_server_flutter) for android and ios implementation in flutter
+Checkout [Pocketbase Server Flutter](https://github.com/rohitsangwan01/pocketbase_server_flutter) for android and ios implementation in flutter
 
 <img src="assets/ss_flutter.png" height="300">
 
-checkout [Pocketbase Server Android](https://github.com/rohitsangwan01/pocketbase_server_android_example) for native android implementation
+Checkout [Pocketbase Server Android](https://github.com/rohitsangwan01/pocketbase_server_android_example) for native android implementation
 
 <img src="assets/ss_android_1.png" height="300">
 <img src="assets/ss_android.jpg" height="300">
