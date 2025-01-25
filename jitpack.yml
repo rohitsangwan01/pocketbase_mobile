@@ -1,0 +1,5 @@
+install:
+  - Version="1.0.0" 
+  - File="pocketbaseMobile.aar"
+  - wget -O $File https://github.com/rohitsangwan01/pocketbase_mobile/releases/download/$Version/$File
+  - mvn install:install-file -Dfile=$File -DgroupId=com.github.rohitsangwan01 -DartifactId=pocketbase_mobile -Dversion=$Version -Dpackaging=aar -DgeneratePom=true
