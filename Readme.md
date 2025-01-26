@@ -33,7 +33,7 @@ allprojects {
 
 ```gradlew
 dependencies {
-    implementation 'com.github.rohitsangwan01:pocketbase_android:Tag'
+    implementation 'com.github.rohitsangwan01:pocketbase_mobile:Tag'
 }
 ```
 
