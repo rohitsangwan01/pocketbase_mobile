@@ -21,7 +21,10 @@ var app *pocketbase.PocketBase
 func RegisterNativeBridgeCallback(c NativeBridge) { nativeBridge = c }
 
 func StartPocketbase(path string, hostname string, port string, staticFilesPath string, getApiLogs bool, email string, password string, hooks_path string) {
-	os.Args = append(os.Args, "serve", "--http", hostname+":"+port)
+	os.Args = []string{os.Args[0]}
+    // Then add our server arguments
+    os.Args = append(os.Args, "serve", "--http", hostname+":"+port)
+	
 	appConfig := pocketbase.Config{
 		DefaultDataDir: path,
 	}
@@ -31,7 +34,7 @@ func StartPocketbase(path string, hostname string, port string, staticFilesPath 
 		StopPocketbase()
 	}
 
-	app := pocketbase.NewWithConfig(appConfig)
+	app = pocketbase.NewWithConfig(appConfig)
 	setupPocketbaseCallbacks(app, getApiLogs, staticFilesPath, email, password)
 
 	// Setup hooks
@@ -62,6 +65,10 @@ func StopPocketbase() {
 	if app == nil {
 		sendCommand("log", "Pocketbase is not running")
 		return
+	}
+	if(!app.IsBootstrapped()){
+		sendCommand("log", "Pocketbase is not Bootstrapped")
+       return
 	}
 	app.OnTerminate().Trigger(&core.TerminateEvent{App: app})
 	app = nil
@@ -140,7 +147,7 @@ func setupPocketbaseCallbacks(app *pocketbase.PocketBase, getApiLogs bool, stati
 
 	app.OnTerminate().BindFunc(func(e *core.TerminateEvent) error {
 		sendCommand("OnTerminate", "isRestart: "+fmt.Sprint(e.IsRestart))
-		return e.Next()
+		return e.App.ResetBootstrapState()
 	})
 
 }
